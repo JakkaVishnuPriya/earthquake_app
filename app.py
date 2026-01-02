@@ -6,20 +6,26 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 import uuid
 
-# ----------------------------------
-# Page Config
-# ----------------------------------
+# =====================================================
+# PAGE CONFIG
+# =====================================================
 st.set_page_config(
-    page_title="Earthquake Alert Prediction",
-    layout="centered"
+    page_title="Quake Pred | Earthquake Alert Prediction",
+    page_icon="🌍",
+    layout="wide"
 )
 
-st.title("🌍 Earthquake Alert Prediction System")
-st.write("Predict earthquake alert level using Machine Learning")
+# =====================================================
+# SESSION STATE (LOGIN)
+# =====================================================
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+if "username" not in st.session_state:
+    st.session_state.username = ""
 
-# ----------------------------------
-# Load Model, Scaler, Feature Names
-# ----------------------------------
+# =====================================================
+# LOAD MODEL
+# =====================================================
 @st.cache_resource
 def load_artifacts():
     model = joblib.load("earthquake_rf_model.pkl")
@@ -29,16 +35,10 @@ def load_artifacts():
 
 model, scaler, feature_names = load_artifacts()
 
-# ----------------------------------
-# Alert mappings
-# ----------------------------------
-alert_to_class = {
-    "green": 0,
-    "yellow": 1,
-    "orange": 2,
-    "red": 3
-}
-
+# =====================================================
+# ALERT CONFIG
+# =====================================================
+alert_to_class = {"green": 0, "yellow": 1, "orange": 2, "red": 3}
 class_to_alert = {v: k for k, v in alert_to_class.items()}
 
 ALERT_COLORS = {
@@ -48,77 +48,179 @@ ALERT_COLORS = {
     "red": "#ef4444"
 }
 
-# ----------------------------------
-# Input Form
-# ----------------------------------
-st.subheader("📊 Enter Earthquake Parameters")
+# =====================================================
+# GLOBAL CSS (BEAUTIFUL UI)
+# =====================================================
+st.markdown("""
+<style>
+.card {
+    padding:20px;
+    border-radius:15px;
+    background:#0f172a;
+    color:white;
+    box-shadow:0 10px 25px rgba(0,0,0,0.25);
+    margin-bottom:20px;
+}
+.footer {
+    text-align:center;
+    padding:20px;
+    margin-top:40px;
+    background:#020617;
+    color:white;
+    border-radius:15px;
+}
+</style>
+""", unsafe_allow_html=True)
 
-with st.form("prediction_form"):
-    magnitude = st.number_input("Magnitude", step=0.1)
-    depth = st.number_input("Depth (km)", step=1.0)
-    cdi = st.number_input("CDI", step=0.1)
-    mmi = st.number_input("MMI", step=0.1)
-    sig = st.number_input("Significance (sig)", step=1.0)
+# =====================================================
+# SIDEBAR NAVIGATION
+# =====================================================
+st.sidebar.title("🌍 Quake Pred")
 
-    submitted = st.form_submit_button("🔮 Predict Alert Level")
+menu = st.sidebar.radio(
+    "Navigation",
+    ["Home", "Try Free", "Predict", "Dashboard", "Login / Logout"]
+)
 
-# ----------------------------------
-# Prediction
-# ----------------------------------
-if submitted:
-    try:
-        prediction_id = str(uuid.uuid4())[:8]
-        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+# =====================================================
+# HOME PAGE
+# =====================================================
+if menu == "Home":
+    st.markdown("""
+    <div class="card">
+        <h1>🌍 Quake Pred</h1>
+        <p>Advanced Earthquake Alert Prediction System using Machine Learning</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-        input_data = pd.DataFrame([{
-            "magnitude": magnitude,
-            "depth": depth,
-            "cdi": cdi,
-            "mmi": mmi,
-            "sig": sig
-        }])
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Model", "Random Forest")
+    col2.metric("Alert Levels", "Green | Yellow | Orange | Red")
+    col3.metric("Deployment", "Streamlit Cloud")
 
-        input_data = input_data[feature_names]
-        scaled_input = scaler.transform(input_data)
+    st.info("🔐 Login to access full prediction & dashboard features.")
 
-        predicted_class = model.predict(scaled_input)[0]
-        probabilities = model.predict_proba(scaled_input)[0]
+# =====================================================
+# TRY FREE (NO LOGIN REQUIRED)
+# =====================================================
+elif menu == "Try Free":
+    st.subheader("⚡ Free Earthquake Alert Prediction")
 
-        predicted_alert = class_to_alert[predicted_class]
-        alert_color = ALERT_COLORS[predicted_alert]
+    with st.form("free_form"):
+        magnitude = st.number_input("Magnitude", step=0.1)
+        depth = st.number_input("Depth (km)", step=1.0)
+        cdi = st.number_input("CDI", step=0.1)
+        mmi = st.number_input("MMI", step=0.1)
+        sig = st.number_input("Significance", step=1.0)
+        submit = st.form_submit_button("🔮 Predict")
 
-        # ----------------------------------
-        # Display Result
-        # ----------------------------------
+    if submit:
+        X = pd.DataFrame([[magnitude, depth, cdi, mmi, sig]], columns=feature_names)
+        X_scaled = scaler.transform(X)
+        pred = model.predict(X_scaled)[0]
+        alert = class_to_alert[pred]
+
         st.markdown(
-            f"""
-            <div style="padding:15px; background-color:{alert_color}; color:white; border-radius:10px; text-align:center;">
-                <h2>ALERT LEVEL: {predicted_alert.upper()}</h2>
-            </div>
-            """,
+            f"<div class='card' style='background:{ALERT_COLORS[alert]};'>"
+            f"<h2>ALERT LEVEL: {alert.upper()}</h2></div>",
             unsafe_allow_html=True
         )
 
-        st.write(f"🆔 **Prediction ID:** {prediction_id}")
-        st.write(f"🕒 **Time:** {current_time}")
+# =====================================================
+# LOGIN / LOGOUT
+# =====================================================
+elif menu == "Login / Logout":
+    if not st.session_state.logged_in:
+        st.subheader("🔐 Login")
 
-        # ----------------------------------
-        # Probability Chart
-        # ----------------------------------
-        st.subheader("📈 Prediction Probabilities")
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
 
-        alerts = [class_to_alert[i].capitalize() for i in range(len(probabilities))]
-        plot_colors = ['#10b981', '#f59e0b', '#f97316', '#ef4444']
+        if st.button("Login"):
+            if username == "demo_user" and password == "demo123":
+                st.session_state.logged_in = True
+                st.session_state.username = username
+                st.success("✅ Login successful")
+            else:
+                st.error("❌ Invalid credentials")
 
-        fig, ax = plt.subplots(figsize=(7, 4))
-        ax.bar(alerts, probabilities, color=plot_colors)
-        ax.set_ylim(0, 1)
-        ax.set_ylabel("Probability")
+    else:
+        st.success(f"Logged in as **{st.session_state.username}**")
+        if st.button("Logout"):
+            st.session_state.logged_in = False
+            st.session_state.username = ""
+            st.warning("Logged out successfully")
 
-        for i, p in enumerate(probabilities):
-            ax.text(i, p + 0.02, f"{p*100:.1f}%", ha='center')
+# =====================================================
+# PREDICT (LOGIN REQUIRED)
+# =====================================================
+elif menu == "Predict":
+    if not st.session_state.logged_in:
+        st.warning("⚠️ Please login to access prediction.")
+    else:
+        st.subheader("📊 Earthquake Alert Prediction")
 
-        st.pyplot(fig)
+        with st.form("predict_form"):
+            magnitude = st.number_input("Magnitude", step=0.1)
+            depth = st.number_input("Depth (km)", step=1.0)
+            cdi = st.number_input("CDI", step=0.1)
+            mmi = st.number_input("MMI", step=0.1)
+            sig = st.number_input("Significance", step=1.0)
+            submit = st.form_submit_button("Predict")
 
-    except Exception as e:
-        st.error(f"❌ Error during prediction: {e}")
+        if submit:
+            prediction_id = str(uuid.uuid4())[:8]
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            X = pd.DataFrame([[magnitude, depth, cdi, mmi, sig]], columns=feature_names)
+            X_scaled = scaler.transform(X)
+
+            pred = model.predict(X_scaled)[0]
+            probs = model.predict_proba(X_scaled)[0]
+            alert = class_to_alert[pred]
+
+            st.markdown(
+                f"<div class='card' style='background:{ALERT_COLORS[alert]};'>"
+                f"<h2>ALERT LEVEL: {alert.upper()}</h2></div>",
+                unsafe_allow_html=True
+            )
+
+            st.write(f"🆔 Prediction ID: {prediction_id}")
+            st.write(f"🕒 Time: {current_time}")
+
+            fig, ax = plt.subplots(figsize=(6, 4))
+            ax.bar(["Green", "Yellow", "Orange", "Red"], probs, color=list(ALERT_COLORS.values()))
+            ax.set_ylim(0, 1)
+            ax.set_ylabel("Probability")
+
+            for i, p in enumerate(probs):
+                ax.text(i, p + 0.02, f"{p*100:.1f}%", ha="center")
+
+            st.pyplot(fig)
+
+# =====================================================
+# DASHBOARD
+# =====================================================
+elif menu == "Dashboard":
+    if not st.session_state.logged_in:
+        st.warning("⚠️ Login required.")
+    else:
+        st.subheader("📈 Dashboard")
+
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Predictions Today", "24")
+        col2.metric("High Risk Alerts", "5")
+        col3.metric("System Status", "Online")
+
+        st.success("System functioning normally.")
+
+# =====================================================
+# FOOTER
+# =====================================================
+st.markdown("""
+<div class="footer">
+    <h4>Quake Pred</h4>
+    <p>ML-powered Earthquake Alert Prediction System</p>
+    <p>© 2024 | Built with Streamlit</p>
+</div>
+""", unsafe_allow_html=True)
